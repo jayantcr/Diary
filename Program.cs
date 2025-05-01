@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Diagnostics;
+using System.DirectoryServices;
 
 public class TextEditor : Form
 {
@@ -60,6 +61,76 @@ public class TextEditor : Form
         };
         this.Controls.Add(textPanel);
 
+        // Search panel
+        Panel searchPanel = new Panel
+        {
+            Location = new Point(10, 250),
+            Width = 240,
+            Height = 300
+        };
+        calendarPanel.Controls.Add(searchPanel);
+
+        // Search box
+        TextBox searchBox = new TextBox
+        {
+            Location = new Point(0, 0),
+            Width = 150,
+        };
+        searchPanel.Controls.Add(searchBox);
+
+        // Search button
+        Button searchButton = new Button
+        {
+            Location = new Point(155, 0),
+            Text = "Search",
+            Width = 65,
+        };
+        searchPanel.Controls.Add(searchButton);
+
+        // List box for search results
+        ListBox listBox = new ListBox
+        {
+            Location = new Point(0, 60),
+            Width = 230,
+            Height = 280,
+        };
+        listBox.SelectedIndexChanged += (sender, args) =>
+        {
+            if (listBox.SelectedItem != null)
+            {
+                SearchResult result = (SearchResult)listBox.SelectedItem;
+                LoadDataForDate(result.Date);
+                HighlightSearchResult(result);
+            }
+        };
+        searchPanel.Controls.Add(listBox);
+
+        searchButton.Click += (sender, args) =>
+        {
+            string query = searchBox.Text;
+            List<SearchResult> results = Search(query);
+            listBox.Items.Clear();
+            foreach (SearchResult result in results)
+            {
+                listBox.Items.Add(result);
+            }
+        };
+
+        // Clear button
+        Button clearButton = new Button
+        {
+            Location = new Point(155, 30),
+            Text = "Clear",
+            Width = 65,
+        };
+        clearButton.Click += (sender, args) =>
+        {
+            searchBox.Text = string.Empty;
+            listBox.Items.Clear();
+            RemoveHighlighting();
+        };
+        searchPanel.Controls.Add(clearButton);
+
         this.Resize += (sender, args) =>
         {
             textPanel.Width = this.ClientSize.Width - 250;
@@ -105,6 +176,64 @@ public class TextEditor : Form
         // Handle FormClosing event
         this.FormClosing += (sender, args) => SaveData();
     }
+
+    // Search function
+    private List<SearchResult> Search(string query)
+    {
+        List<SearchResult> results = new List<SearchResult>();
+        string[] files = Directory.GetFiles(dataDirectory, "*.json");
+        foreach (string file in files)
+        {
+            string json = File.ReadAllText(file);
+            Entry entry = JsonSerializer.Deserialize<Entry>(json);
+            if (entry.Text.Contains(query, StringComparison.OrdinalIgnoreCase))
+            {
+                string fileName = Path.GetFileNameWithoutExtension(file);
+                DateTime date = DateTime.ParseExact(fileName, "yyyy-MM-dd", null);
+                results.Add(new SearchResult { Date = date, Text = entry.Text, Query = query });
+            }
+        }
+        return results;
+    }
+
+    // Highlight search result
+    private void HighlightSearchResult(SearchResult result)
+    {
+        string text = textBox.Text;
+        int index = text.IndexOf(result.Query, StringComparison.OrdinalIgnoreCase);
+        while (index != -1)
+        {
+            textBox.Select(index, result.Query.Length);
+            textBox.SelectionColor = Color.Yellow;
+            textBox.SelectionBackColor = Color.Blue;
+            index = text.IndexOf(result.Query, index + 1, StringComparison.OrdinalIgnoreCase);
+        }
+        textBox.Select(0, 0); // reset selection
+        textBox.SelectionColor = textBox.ForeColor; // reset text color
+    }
+
+    // Remove highlighting
+    private void RemoveHighlighting()
+    {
+        textBox.SelectAll();
+        textBox.SelectionColor = textBox.ForeColor;
+        textBox.SelectionBackColor = textBox.BackColor;
+        textBox.DeselectAll();
+    }
+
+    // Search result class
+    private class SearchResult
+    {
+        public DateTime Date { get; set; }
+        public string Text { get; set; }
+        public string Query { get; set; }
+
+        public override string ToString()
+        {
+            return Date.ToString("yyyy-MM-dd");
+        }
+    }
+
 
     private void Calendar_DateSelected(object sender, DateRangeEventArgs e)
     {
