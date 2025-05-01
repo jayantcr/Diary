@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Diagnostics;
-using System.DirectoryServices;
 
 public class TextEditor : Form
 {
@@ -145,20 +144,51 @@ public class TextEditor : Form
         };
         textPanel.Controls.Add(dateLabel);
 
+
+
+        // Line number text box
+        TextBox lineNumberTextBox = new TextBox
+        {
+            Location = new Point(250, 20),
+            Width = 30,
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.None,
+            WordWrap = false,
+            Height = this.ClientSize.Height,
+        };
+        textPanel.Controls.Add(lineNumberTextBox);
+
         // Text box for editing
         textBox = new RichTextBox
         {
             Dock = DockStyle.Fill,
             Multiline = true,
             DetectUrls = true,
-            Left = 250,
+            Left = 280,
             Top = 20,
-            Width = this.ClientSize.Width - 250,
+            Width = this.ClientSize.Width - 220,
             Height = this.ClientSize.Height,
             Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom,
         };
         textBox.LinkClicked += (sender, args) => Process.Start(new ProcessStartInfo(args.LinkText) { UseShellExecute = true });
         textPanel.Controls.Add(textBox);
+
+        UpdateLineNumbers(lineNumberTextBox, textBox);
+
+        // Update line numbers
+        textBox.TextChanged += (sender, args) =>
+        {
+            UpdateLineNumbers(lineNumberTextBox, textBox);
+        };
+
+        // Synchronize scrolling
+        textBox.VScroll += (sender, args) =>
+        {
+            lineNumberTextBox.SelectionStart = textBox.GetFirstCharIndexFromLine(textBox.GetLineFromCharIndex(textBox.SelectionStart));
+            lineNumberTextBox.ScrollToCaret();
+        };
+
 
         // Load data for the current date
         currentDate = DateTime.Now;
@@ -175,6 +205,17 @@ public class TextEditor : Form
 
         // Handle FormClosing event
         this.FormClosing += (sender, args) => SaveData();
+    }
+
+    // Update line numbers
+    private void UpdateLineNumbers(TextBox lineNumberTextBox, RichTextBox textBox)
+    {
+        int lineCount = textBox.GetLineFromCharIndex(textBox.TextLength) + 1;
+        string lineNumbers = string.Join(Environment.NewLine, Enumerable.Range(1, lineCount).Select(i => i.ToString()));
+        lineNumberTextBox.Text = lineNumbers;
+        lineNumberTextBox.Multiline = true;
+        lineNumberTextBox.WordWrap = false;
+        lineNumberTextBox.Height = textBox.Height;
     }
 
     // Search function
@@ -225,8 +266,8 @@ public class TextEditor : Form
     private class SearchResult
     {
         public DateTime Date { get; set; }
-        public string Text { get; set; }
-        public string Query { get; set; }
+        public required string Text { get; set; }
+        public required string Query { get; set; }
 
         public override string ToString()
         {
