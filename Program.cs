@@ -6,14 +6,14 @@ public class TextEditor : Form
     private MonthCalendar calendar;
     private RichTextBox textBox;
     private Label dateLabel;
-    private string dataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TextEditor");
-    private string currentDateFile;
+    private string dataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GoodVibesDiary");
+    private string currentDateFile = string.Empty;
     private DateTime currentDate;
 
     public TextEditor()
     {
         // Initialize UI components
-        this.Text = "Diary";
+        this.Text = "Good Vibes Diary";
         this.MinimumSize = new Size(800, 600);
 
         // Panel for calendar and navigation buttons
@@ -149,13 +149,14 @@ public class TextEditor : Form
         // Line number text box
         TextBox lineNumberTextBox = new TextBox
         {
-            Location = new Point(250, 20),
-            Width = 30,
+            Location = new Point(250, 25),
+            Width = 40,
             Multiline = true,
             ReadOnly = true,
             ScrollBars = ScrollBars.None,
             WordWrap = false,
             Height = this.ClientSize.Height,
+            Font = new Font("Consolas", 11)
         };
         textPanel.Controls.Add(lineNumberTextBox);
 
@@ -165,11 +166,12 @@ public class TextEditor : Form
             Dock = DockStyle.Fill,
             Multiline = true,
             DetectUrls = true,
-            Left = 280,
-            Top = 20,
-            Width = this.ClientSize.Width - 220,
+            Left = 290,
+            Top = 24,
+            Width = this.ClientSize.Width - 210,
             Height = this.ClientSize.Height,
             Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom,
+            Font = new Font("Consolas", 11)
         };
         textBox.LinkClicked += (sender, args) => Process.Start(new ProcessStartInfo(args.LinkText) { UseShellExecute = true });
         textPanel.Controls.Add(textBox);
@@ -211,7 +213,7 @@ public class TextEditor : Form
     private void UpdateLineNumbers(TextBox lineNumberTextBox, RichTextBox textBox)
     {
         int lineCount = textBox.GetLineFromCharIndex(textBox.TextLength) + 1;
-        string lineNumbers = string.Join(Environment.NewLine, Enumerable.Range(1, lineCount).Select(i => i.ToString()));
+        string lineNumbers = string.Join(Environment.NewLine, Enumerable.Range(1, lineCount).Select(i => i.ToString().PadLeft(3)));
         lineNumberTextBox.Text = lineNumbers;
         lineNumberTextBox.Multiline = true;
         lineNumberTextBox.WordWrap = false;
@@ -276,7 +278,7 @@ public class TextEditor : Form
     }
 
 
-    private void Calendar_DateSelected(object sender, DateRangeEventArgs e)
+    private void Calendar_DateSelected(object? sender, DateRangeEventArgs e)
     {
         LoadDataForDate(e.Start);
     }
@@ -291,8 +293,15 @@ public class TextEditor : Form
         if (File.Exists(currentDateFile))
         {
             string json = File.ReadAllText(currentDateFile);
-            Entry entry = JsonSerializer.Deserialize<Entry>(json);
-            textBox.Text = entry.Text;
+            Entry? entry = JsonSerializer.Deserialize<Entry>(json);
+            if (entry != null) // Ensure entry is not null before accessing its properties
+            {
+                textBox.Text = entry.Text;
+            }
+            else
+            {
+                textBox.Text = string.Empty; // Handle case where deserialization returns null
+            }
         }
         else
         {
@@ -326,7 +335,7 @@ public class TextEditor : Form
 
     private class Entry
     {
-        public string Text { get; set; }
+        public required string Text { get; set; }
     }
 
     [STAThread]
