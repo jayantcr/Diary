@@ -17,6 +17,7 @@ public class TextEditor : Form
         // Initialize UI components
         this.Text = "Good Vibes Diary";
         this.MinimumSize = new Size(800, 600);
+        this.Icon = new Icon("Resources\\icon.ico");
 
         // Panel for calendar and navigation buttons
         Panel calendarPanel = new Panel
