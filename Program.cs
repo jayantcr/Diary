@@ -132,12 +132,6 @@ public class TextEditor : Form
         };
         searchPanel.Controls.Add(clearButton);
 
-        this.Resize += (sender, args) =>
-        {
-            textPanel.Width = this.ClientSize.Width - 250;
-            textPanel.Height = this.ClientSize.Height;
-        };
-
         // Date label at the top of the text box
         dateLabel = new Label
         {
@@ -145,8 +139,6 @@ public class TextEditor : Form
             Top = 0
         };
         textPanel.Controls.Add(dateLabel);
-
-
 
         // Line number text box
         lineNumberTextBox = new TextBox
@@ -175,7 +167,24 @@ public class TextEditor : Form
             Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom,
             Font = new Font("Consolas", 11)
         };
-        richTextBox.LinkClicked += (sender, args) => Process.Start(new ProcessStartInfo(args.LinkText) { UseShellExecute = true });
+        richTextBox.LinkClicked += (sender, args) =>
+        {
+            if (!string.IsNullOrEmpty(args.LinkText))
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo(args.LinkText) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to open link: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            else
+            {
+                MessageBox.Show("The link is empty or null.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        };
         textPanel.Controls.Add(richTextBox);
 
         UpdateLineNumbers(lineNumberTextBox, richTextBox);
@@ -207,48 +216,18 @@ public class TextEditor : Form
         // Save data when text box loses focus
         richTextBox.Leave += (sender, args) => SaveData();
 
+        this.Resize += (sender, args) =>
+        {
+            textPanel.Width = this.ClientSize.Width - 250;
+            textPanel.Height = this.ClientSize.Height;
+
+            // Update line numbers when the window is resized
+            UpdateLineNumbers(lineNumberTextBox, richTextBox);
+        };
+
         // Handle FormClosing event
         this.FormClosing += (sender, args) => SaveData();
     }
-
-    // Update line numbers
-    //private void UpdateLineNumbers(TextBox lineNumberTextBox, RichTextBox textBox)
-    //{
-    //    int lineCount = textBox.GetLineFromCharIndex(textBox.TextLength) + 1;
-    //    List<string> lineNumbers = [];
-    //    for (int i = 0; i < lineCount; i++)
-    //    {
-    //        int lineStart = textBox.GetFirstCharIndexFromLine(i);
-    //        int lineEnd = (i == lineCount - 1) ? textBox.TextLength : textBox.GetFirstCharIndexFromLine(i + 1);
-    //        string lineText = textBox.Text.Substring(lineStart, lineEnd - lineStart).TrimEnd();
-    //        int lineHeight = (int)Math.Ceiling((double)textBox.GetPositionFromCharIndex(lineStart + lineText.Length).X / textBox.ClientRectangle.Width);
-    //        if (lineHeight == 0) lineHeight = 1; // handle empty lines
-    //        for (int j = 0; j < lineHeight; j++)
-    //        {
-    //            if (j == 0)
-    //            {
-    //                lineNumbers.Add((i + 1).ToString());
-    //            }
-    //            else
-    //            {
-    //                lineNumbers.Add("");
-    //            }
-    //        }
-    //    }
-
-    //    // Remove extra empty row at the end
-    //    if (lineNumbers.Count > 0 && lineNumbers.Last() == "")
-    //    {
-    //        lineNumbers.RemoveAt(lineNumbers.Count - 1);
-    //    }
-
-    //    int maxLength = lineCount.ToString().Length;
-    //    string lineNumbersText = string.Join(Environment.NewLine, lineNumbers.Select(s => s.PadLeft(maxLength)));
-    //    lineNumberTextBox.Text = lineNumbersText;
-    //    lineNumberTextBox.Multiline = true;
-    //    lineNumberTextBox.WordWrap = false;
-    //    lineNumberTextBox.Height = textBox.Height;
-    //}
 
     private void UpdateLineNumbers(TextBox lineNumberTextBox, RichTextBox textBox)
     {
@@ -292,9 +271,6 @@ public class TextEditor : Form
         lineNumberTextBox.Height = textBox.Height;
     }
 
-
-
-
     // Add handler for Resize event
     private void Form1_Resize(object sender, EventArgs e)
     {
@@ -319,8 +295,8 @@ public class TextEditor : Form
         foreach (string file in files)
         {
             string json = File.ReadAllText(file);
-            Entry entry = JsonSerializer.Deserialize<Entry>(json);
-            if (entry.Text.Contains(query, StringComparison.OrdinalIgnoreCase))
+            Entry? entry = JsonSerializer.Deserialize<Entry>(json);
+            if (entry != null && entry.Text.Contains(query, StringComparison.OrdinalIgnoreCase))
             {
                 string fileName = Path.GetFileNameWithoutExtension(file);
                 DateTime date = DateTime.ParseExact(fileName, "yyyy-MM-dd", null);
