@@ -1,14 +1,16 @@
 using System.Text.Json;
 using System.Diagnostics;
+using System.Windows.Forms;
 
 public class TextEditor : Form
 {
     private MonthCalendar calendar;
-    private RichTextBox textBox;
     private Label dateLabel;
     private string dataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GoodVibesDiary");
     private string currentDateFile = string.Empty;
     private DateTime currentDate;
+    private TextBox lineNumberTextBox;
+    private RichTextBox richTextBox;
 
     public TextEditor()
     {
@@ -147,7 +149,7 @@ public class TextEditor : Form
 
 
         // Line number text box
-        TextBox lineNumberTextBox = new TextBox
+        lineNumberTextBox = new TextBox
         {
             Location = new Point(250, 25),
             Width = 40,
@@ -161,7 +163,7 @@ public class TextEditor : Form
         textPanel.Controls.Add(lineNumberTextBox);
 
         // Text box for editing
-        textBox = new RichTextBox
+        richTextBox = new RichTextBox
         {
             Dock = DockStyle.Fill,
             Multiline = true,
@@ -173,21 +175,21 @@ public class TextEditor : Form
             Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom,
             Font = new Font("Consolas", 11)
         };
-        textBox.LinkClicked += (sender, args) => Process.Start(new ProcessStartInfo(args.LinkText) { UseShellExecute = true });
-        textPanel.Controls.Add(textBox);
+        richTextBox.LinkClicked += (sender, args) => Process.Start(new ProcessStartInfo(args.LinkText) { UseShellExecute = true });
+        textPanel.Controls.Add(richTextBox);
 
-        UpdateLineNumbers(lineNumberTextBox, textBox);
+        UpdateLineNumbers(lineNumberTextBox, richTextBox);
 
         // Update line numbers
-        textBox.TextChanged += (sender, args) =>
+        richTextBox.TextChanged += (sender, args) =>
         {
-            UpdateLineNumbers(lineNumberTextBox, textBox);
+            UpdateLineNumbers(lineNumberTextBox, richTextBox);
         };
 
         // Synchronize scrolling
-        textBox.VScroll += (sender, args) =>
+        richTextBox.VScroll += (sender, args) =>
         {
-            lineNumberTextBox.SelectionStart = textBox.GetFirstCharIndexFromLine(textBox.GetLineFromCharIndex(textBox.SelectionStart));
+            lineNumberTextBox.SelectionStart = richTextBox.GetFirstCharIndexFromLine(richTextBox.GetLineFromCharIndex(richTextBox.SelectionStart));
             lineNumberTextBox.ScrollToCaret();
         };
 
@@ -203,21 +205,110 @@ public class TextEditor : Form
         }
 
         // Save data when text box loses focus
-        textBox.Leave += (sender, args) => SaveData();
+        richTextBox.Leave += (sender, args) => SaveData();
 
         // Handle FormClosing event
         this.FormClosing += (sender, args) => SaveData();
     }
 
     // Update line numbers
+    //private void UpdateLineNumbers(TextBox lineNumberTextBox, RichTextBox textBox)
+    //{
+    //    int lineCount = textBox.GetLineFromCharIndex(textBox.TextLength) + 1;
+    //    List<string> lineNumbers = [];
+    //    for (int i = 0; i < lineCount; i++)
+    //    {
+    //        int lineStart = textBox.GetFirstCharIndexFromLine(i);
+    //        int lineEnd = (i == lineCount - 1) ? textBox.TextLength : textBox.GetFirstCharIndexFromLine(i + 1);
+    //        string lineText = textBox.Text.Substring(lineStart, lineEnd - lineStart).TrimEnd();
+    //        int lineHeight = (int)Math.Ceiling((double)textBox.GetPositionFromCharIndex(lineStart + lineText.Length).X / textBox.ClientRectangle.Width);
+    //        if (lineHeight == 0) lineHeight = 1; // handle empty lines
+    //        for (int j = 0; j < lineHeight; j++)
+    //        {
+    //            if (j == 0)
+    //            {
+    //                lineNumbers.Add((i + 1).ToString());
+    //            }
+    //            else
+    //            {
+    //                lineNumbers.Add("");
+    //            }
+    //        }
+    //    }
+
+    //    // Remove extra empty row at the end
+    //    if (lineNumbers.Count > 0 && lineNumbers.Last() == "")
+    //    {
+    //        lineNumbers.RemoveAt(lineNumbers.Count - 1);
+    //    }
+
+    //    int maxLength = lineCount.ToString().Length;
+    //    string lineNumbersText = string.Join(Environment.NewLine, lineNumbers.Select(s => s.PadLeft(maxLength)));
+    //    lineNumberTextBox.Text = lineNumbersText;
+    //    lineNumberTextBox.Multiline = true;
+    //    lineNumberTextBox.WordWrap = false;
+    //    lineNumberTextBox.Height = textBox.Height;
+    //}
+
     private void UpdateLineNumbers(TextBox lineNumberTextBox, RichTextBox textBox)
     {
-        int lineCount = textBox.GetLineFromCharIndex(textBox.TextLength) + 1;
-        string lineNumbers = string.Join(Environment.NewLine, Enumerable.Range(1, lineCount).Select(i => i.ToString().PadLeft(3)));
-        lineNumberTextBox.Text = lineNumbers;
+        // Clear the line numbers TextBox
+        lineNumberTextBox.Clear();
+
+        // Get the total number of lines in the RichTextBox
+        int totalLines = textBox.Lines.Length;
+        //int totalLines = textBox.GetLineFromCharIndex(textBox.TextLength) - 1;
+
+        // List to store line numbers
+        List<string> lineNumbers = new List<string>();
+        int lineNumber = 1;
+        int lineCount = 1;
+        int lastCharIndex = 0;
+        // Check if each line is wrapped or not
+        foreach (var line in textBox.Lines)
+        {
+            lineNumbers.Add(lineCount.ToString());
+            // get the line number of the last character of this line
+            if(line.Length > 0)
+            {
+                lastCharIndex += line.Length;
+                int lastCharLineNumber = textBox.GetLineFromCharIndex(lastCharIndex) + 1;
+                while (lastCharLineNumber > lineNumber)
+                {
+                    lineNumbers.Add("");
+                    lineNumber++;
+                }
+            }
+            lineNumber++;
+            lineCount++;
+        }
+
+        // Join the line numbers with newlines and set the TextBox text
+        lineNumberTextBox.Text = string.Join(Environment.NewLine, lineNumbers);
+
+        // Adjust the line number TextBox properties
         lineNumberTextBox.Multiline = true;
         lineNumberTextBox.WordWrap = false;
         lineNumberTextBox.Height = textBox.Height;
+    }
+
+
+
+
+    // Add handler for Resize event
+    private void Form1_Resize(object sender, EventArgs e)
+    {
+        UpdateLineNumbers(lineNumberTextBox, richTextBox);
+    }
+
+    private void richTextBox_TextChanged(object sender, EventArgs e)
+    {
+        UpdateLineNumbers(lineNumberTextBox, richTextBox);
+    }
+
+    private void richTextBox_Resize(object sender, EventArgs e)
+    {
+        UpdateLineNumbers(lineNumberTextBox, richTextBox);
     }
 
     // Search function
@@ -242,26 +333,26 @@ public class TextEditor : Form
     // Highlight search result
     private void HighlightSearchResult(SearchResult result)
     {
-        string text = textBox.Text;
+        string text = richTextBox.Text;
         int index = text.IndexOf(result.Query, StringComparison.OrdinalIgnoreCase);
         while (index != -1)
         {
-            textBox.Select(index, result.Query.Length);
-            textBox.SelectionColor = Color.Yellow;
-            textBox.SelectionBackColor = Color.Blue;
+            richTextBox.Select(index, result.Query.Length);
+            richTextBox.SelectionColor = Color.Yellow;
+            richTextBox.SelectionBackColor = Color.Blue;
             index = text.IndexOf(result.Query, index + 1, StringComparison.OrdinalIgnoreCase);
         }
-        textBox.Select(0, 0); // reset selection
-        textBox.SelectionColor = textBox.ForeColor; // reset text color
+        richTextBox.Select(0, 0); // reset selection
+        richTextBox.SelectionColor = richTextBox.ForeColor; // reset text color
     }
 
     // Remove highlighting
     private void RemoveHighlighting()
     {
-        textBox.SelectAll();
-        textBox.SelectionColor = textBox.ForeColor;
-        textBox.SelectionBackColor = textBox.BackColor;
-        textBox.DeselectAll();
+        richTextBox.SelectAll();
+        richTextBox.SelectionColor = richTextBox.ForeColor;
+        richTextBox.SelectionBackColor = richTextBox.BackColor;
+        richTextBox.DeselectAll();
     }
 
     // Search result class
@@ -296,16 +387,16 @@ public class TextEditor : Form
             Entry? entry = JsonSerializer.Deserialize<Entry>(json);
             if (entry != null) // Ensure entry is not null before accessing its properties
             {
-                textBox.Text = entry.Text;
+                richTextBox.Text = entry.Text;
             }
             else
             {
-                textBox.Text = string.Empty; // Handle case where deserialization returns null
+                richTextBox.Text = string.Empty; // Handle case where deserialization returns null
             }
         }
         else
         {
-            textBox.Text = string.Empty;
+            richTextBox.Text = string.Empty;
         }
     }
 
@@ -313,7 +404,7 @@ public class TextEditor : Form
     {
         if (!string.IsNullOrEmpty(currentDateFile))
         {
-            Entry entry = new Entry { Text = textBox.Text };
+            Entry entry = new Entry { Text = richTextBox.Text };
             string json = JsonSerializer.Serialize(entry);
             File.WriteAllText(currentDateFile, json);
         }
