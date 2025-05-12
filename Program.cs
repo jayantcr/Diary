@@ -287,12 +287,12 @@ public class TextEditor : Form
         // Text box for editing
         richTextBox = new RichTextBox
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.None,
             Multiline = true,
             DetectUrls = true,
             Left = 290,
             Top = 24,
-            Width = this.ClientSize.Width - 210,
+            Width = this.ClientSize.Width - 295,
             Height = this.ClientSize.Height,
             Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom,
             Font = new Font("Consolas", 11)
@@ -349,7 +349,14 @@ public class TextEditor : Form
         {
             textPanel.Width = this.ClientSize.Width - 250;
             textPanel.Height = this.ClientSize.Height;
+            richTextBox.Width = this.ClientSize.Width - 295;
             UpdateLineNumbers(lineNumberTextBox, richTextBox);
+        };
+
+        // Handle window state changes
+        this.SizeChanged += (sender, args) =>
+        {
+            richTextBox.Width = this.ClientSize.Width - 295;
         };
 
         // Handle FormClosing event
