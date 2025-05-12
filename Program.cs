@@ -12,6 +12,103 @@ public class TextEditor : Form
     private TextBox lineNumberTextBox;
     private RichTextBox richTextBox;
 
+    private class Entry
+    {
+        public required string Text { get; set; }
+    }
+
+    private class SearchResult
+    {
+        public DateTime Date { get; set; }
+        public required string Text { get; set; }
+        public required string Query { get; set; }
+
+        public override string ToString()
+        {
+            return Date.ToString("yyyy-MM-dd");
+        }
+    }
+
+    private class SearchIndex
+    {
+        private readonly Dictionary<string, HashSet<string>> wordIndex = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> fileContents = new(StringComparer.OrdinalIgnoreCase);
+        private DateTime lastIndexUpdate = DateTime.MinValue;
+        private readonly string dataDirectory;
+
+        public SearchIndex(string dataDirectory) => this.dataDirectory = dataDirectory;
+
+        public void UpdateIndex()
+        {
+            if ((DateTime.Now - lastIndexUpdate).TotalMinutes < 5)
+                return;
+
+            wordIndex.Clear();
+            fileContents.Clear();
+
+            foreach (string file in Directory.GetFiles(dataDirectory, "*.json"))
+            {
+                try
+                {
+                    string json = File.ReadAllText(file);
+                    if (JsonSerializer.Deserialize<Entry>(json) is Entry entry)
+                    {
+                        string fileName = Path.GetFileNameWithoutExtension(file);
+                        fileContents[fileName] = entry.Text;
+                        
+                        string[] words = entry.Text.Split(new[] { ' ', '\n', '\r', '\t', '.', ',', '!', '?' }, 
+                            StringSplitOptions.RemoveEmptyEntries);
+                        foreach (string word in words)
+                        {
+                            string normalizedWord = word.ToLowerInvariant();
+                            if (!wordIndex.ContainsKey(normalizedWord))
+                                wordIndex[normalizedWord] = new();
+                            wordIndex[normalizedWord].Add(fileName);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error indexing file {file}: {ex.Message}");
+                }
+            }
+            lastIndexUpdate = DateTime.Now;
+        }
+
+        public List<SearchResult> Search(string query)
+        {
+            UpdateIndex();
+            if (string.IsNullOrWhiteSpace(query))
+                return new();
+
+            string normalizedQuery = query.ToLowerInvariant();
+            HashSet<string> matchingFiles = new();
+
+            if (wordIndex.ContainsKey(normalizedQuery))
+                matchingFiles.UnionWith(wordIndex[normalizedQuery]);
+
+            foreach (var word in wordIndex.Keys)
+            {
+                if (word.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase) || 
+                    normalizedQuery.Contains(word, StringComparison.OrdinalIgnoreCase))
+                    matchingFiles.UnionWith(wordIndex[word]);
+            }
+
+            return matchingFiles
+                .Where(fileName => fileContents.TryGetValue(fileName, out _))
+                .Select(fileName => new SearchResult 
+                { 
+                    Date = DateTime.ParseExact(fileName, "yyyy-MM-dd", null),
+                    Text = fileContents[fileName],
+                    Query = query
+                })
+                .OrderBy(r => r.Date)
+                .ToList();
+        }
+    }
+
+    private SearchIndex? searchIndex;
+
     public TextEditor()
     {
         // Initialize UI components
@@ -89,6 +186,16 @@ public class TextEditor : Form
         };
         searchPanel.Controls.Add(searchButton);
 
+        // Add Enter key handler to search box
+        searchBox.KeyPress += (sender, e) =>
+        {
+            if (e.KeyChar == (char)Keys.Enter)
+            {
+                e.Handled = true; // Prevent the beep sound
+                searchButton.PerformClick();
+            }
+        };
+
         // List box for search results
         ListBox listBox = new ListBox
         {
@@ -107,14 +214,36 @@ public class TextEditor : Form
         };
         searchPanel.Controls.Add(listBox);
 
+        // Initialize search index
+        searchIndex = new SearchIndex(dataDirectory);
+
+        // Update search button click handler
         searchButton.Click += (sender, args) =>
         {
             string query = searchBox.Text;
-            List<SearchResult> results = Search(query);
-            listBox.Items.Clear();
-            foreach (SearchResult result in results)
+            if (string.IsNullOrWhiteSpace(query))
             {
-                listBox.Items.Add(result);
+                MessageBox.Show("Please enter a search term.", "Search", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            Cursor = Cursors.WaitCursor;
+            try
+            {
+                List<SearchResult> results = searchIndex?.Search(query) ?? new List<SearchResult>();
+                listBox.Items.Clear();
+                foreach (SearchResult result in results)
+                {
+                    listBox.Items.Add(result);
+                }
+                if (results.Count == 0)
+                {
+                    MessageBox.Show("No matches found.", "Search", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            finally
+            {
+                Cursor = Cursors.Default;
             }
         };
 
@@ -203,7 +332,6 @@ public class TextEditor : Form
             lineNumberTextBox.ScrollToCaret();
         };
 
-
         // Load data for the current date
         currentDate = DateTime.Now;
         LoadDataForDate(currentDate);
@@ -221,8 +349,6 @@ public class TextEditor : Form
         {
             textPanel.Width = this.ClientSize.Width - 250;
             textPanel.Height = this.ClientSize.Height;
-
-            // Update line numbers when the window is resized
             UpdateLineNumbers(lineNumberTextBox, richTextBox);
         };
 
@@ -232,23 +358,15 @@ public class TextEditor : Form
 
     private void UpdateLineNumbers(TextBox lineNumberTextBox, RichTextBox textBox)
     {
-        // Clear the line numbers TextBox
         lineNumberTextBox.Clear();
-
-        // Get the total number of lines in the RichTextBox
-        int totalLines = textBox.Lines.Length;
-        //int totalLines = textBox.GetLineFromCharIndex(textBox.TextLength) - 1;
-
-        // List to store line numbers
-        List<string> lineNumbers = new List<string>();
+        var lineNumbers = new List<string>();
         int lineNumber = 1;
         int lineCount = 1;
         int lastCharIndex = 0;
-        // Check if each line is wrapped or not
+        
         foreach (var line in textBox.Lines)
         {
             lineNumbers.Add(lineCount.ToString());
-            // get the line number of the last character of this line
             if(line.Length > 0)
             {
                 lastCharIndex += line.Length;
@@ -263,67 +381,30 @@ public class TextEditor : Form
             lineCount++;
         }
 
-        // Join the line numbers with newlines and set the TextBox text
         lineNumberTextBox.Text = string.Join(Environment.NewLine, lineNumbers);
-
-        // Adjust the line number TextBox properties
         lineNumberTextBox.Multiline = true;
         lineNumberTextBox.WordWrap = false;
         lineNumberTextBox.Height = textBox.Height;
     }
 
-    // Add handler for Resize event
-    private void Form1_Resize(object sender, EventArgs e)
-    {
-        UpdateLineNumbers(lineNumberTextBox, richTextBox);
-    }
-
-    private void richTextBox_TextChanged(object sender, EventArgs e)
-    {
-        UpdateLineNumbers(lineNumberTextBox, richTextBox);
-    }
-
-    private void richTextBox_Resize(object sender, EventArgs e)
-    {
-        UpdateLineNumbers(lineNumberTextBox, richTextBox);
-    }
-
-    // Search function
-    private List<SearchResult> Search(string query)
-    {
-        List<SearchResult> results = new List<SearchResult>();
-        string[] files = Directory.GetFiles(dataDirectory, "*.json");
-        foreach (string file in files)
-        {
-            string json = File.ReadAllText(file);
-            Entry? entry = JsonSerializer.Deserialize<Entry>(json);
-            if (entry != null && entry.Text.Contains(query, StringComparison.OrdinalIgnoreCase))
-            {
-                string fileName = Path.GetFileNameWithoutExtension(file);
-                DateTime date = DateTime.ParseExact(fileName, "yyyy-MM-dd", null);
-                results.Add(new SearchResult { Date = date, Text = entry.Text, Query = query });
-            }
-        }
-        return results;
-    }
-
-    // Highlight search result
     private void HighlightSearchResult(SearchResult result)
     {
-        string text = richTextBox.Text;
-        int index = text.IndexOf(result.Query, StringComparison.OrdinalIgnoreCase);
-        while (index != -1)
+        richTextBox.SelectAll();
+        richTextBox.SelectionColor = richTextBox.ForeColor;
+        richTextBox.SelectionBackColor = richTextBox.BackColor;
+        richTextBox.DeselectAll();
+
+        int index = 0;
+        while ((index = richTextBox.Text.IndexOf(result.Query, index, StringComparison.OrdinalIgnoreCase)) != -1)
         {
             richTextBox.Select(index, result.Query.Length);
-            richTextBox.SelectionColor = Color.Yellow;
-            richTextBox.SelectionBackColor = Color.Blue;
-            index = text.IndexOf(result.Query, index + 1, StringComparison.OrdinalIgnoreCase);
+            richTextBox.SelectionColor = Color.Black;
+            richTextBox.SelectionBackColor = Color.Yellow;
+            index += result.Query.Length;
         }
-        richTextBox.Select(0, 0); // reset selection
-        richTextBox.SelectionColor = richTextBox.ForeColor; // reset text color
+        richTextBox.Select(0, 0);
     }
 
-    // Remove highlighting
     private void RemoveHighlighting()
     {
         richTextBox.SelectAll();
@@ -331,20 +412,6 @@ public class TextEditor : Form
         richTextBox.SelectionBackColor = richTextBox.BackColor;
         richTextBox.DeselectAll();
     }
-
-    // Search result class
-    private class SearchResult
-    {
-        public DateTime Date { get; set; }
-        public required string Text { get; set; }
-        public required string Query { get; set; }
-
-        public override string ToString()
-        {
-            return Date.ToString("yyyy-MM-dd");
-        }
-    }
-
 
     private void Calendar_DateSelected(object? sender, DateRangeEventArgs e)
     {
@@ -399,11 +466,6 @@ public class TextEditor : Form
         DateTime newDate = currentDate.AddMonths(1);
         calendar.SetDate(newDate);
         LoadDataForDate(newDate);
-    }
-
-    private class Entry
-    {
-        public required string Text { get; set; }
     }
 
     [STAThread]
