@@ -232,13 +232,16 @@ public class TextEditor : Form
             {
                 List<SearchResult> results = searchIndex?.Search(query) ?? new List<SearchResult>();
                 listBox.Items.Clear();
-                foreach (SearchResult result in results)
-                {
-                    listBox.Items.Add(result);
-                }
                 if (results.Count == 0)
                 {
-                    MessageBox.Show("No matches found.", "Search", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    listBox.Items.Add("No matches found.");
+                }
+                else
+                {
+                    foreach (SearchResult result in results)
+                    {
+                        listBox.Items.Add(result);
+                    }
                 }
             }
             finally
